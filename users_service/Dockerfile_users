@@ -1,0 +1,24 @@
+FROM python:3.9.7-alpine
+
+EXPOSE 5002/tcp
+
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+COPY /auth_lib /auth_lib
+COPY requirements.txt /
+
+RUN apk update --no-cache \
+&& apk add build-base postgresql-dev libpq --no-cache --virtual .build-deps \
+&& pip install --no-cache-dir --upgrade pip \
+&& pip install wheel==0.37.1 \
+&& pip install --no-cache-dir -r requirements.txt \
+&& apk del .build-deps \
+&& apk add postgresql-libs libpq --no-cache
+
+
+WORKDIR /app
+COPY users_service/src /app/
+COPY utils/wait_for_pg.py /app/
+COPY .env.test /app
+ENTRYPOINT ["sh", "-c", "python3 wait_for_pg.py; gunicorn wsgi:app --bind 0.0.0.0:5002"]

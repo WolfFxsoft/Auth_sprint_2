@@ -1,0 +1,88 @@
+version: "3.3"
+
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "6831:6831/udp"
+
+  db:
+    image: postgres:13
+    volumes:
+      - type: volume
+        source: db_data
+        target: /var/lib/postgresql/data
+        volume:
+          nocopy: true
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+
+
+  redis:
+    image: redis:6.2.6-alpine
+    logging:
+      driver: none
+    ports:
+      - "6379:6379"
+
+
+  auth_service:
+    build:
+      context: .
+      dockerfile: auth_service/Dockerfile_auth
+    image: auth_service_image
+    environment:
+      - DB_HOST=db
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=redis
+      - JAEGER_HOST=jaeger
+    ports:
+      - "5001:5001"
+    depends_on:
+      - redis
+      - db
+      - jaeger
+
+
+  users_service:
+    build:
+      context: .
+      dockerfile: users_service/Dockerfile_users
+    image: users_service_image
+    environment:
+      - DB_HOST=db
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - AUTH_HOST=auth_service
+      - AUTH_PORT=5001
+      - JAEGER_HOST=jaeger
+    ports:
+      - "5002:5002"
+    depends_on:
+      - db
+      - auth_service
+      - jaeger
+
+
+  nginx:
+    image: nginx:1.19.2
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - auth_service
+    ports:
+      - "5000:80"
+
+
+volumes:
+  db_data:
+    external: true

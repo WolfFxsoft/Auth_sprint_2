@@ -1,0 +1,25 @@
+FROM python:3.9.7-alpine
+
+
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+COPY /auth_lib /auth_lib
+COPY /users_service/tests/functional/requirements.txt /
+
+RUN apk update --no-cache \
+&& apk add build-base postgresql-dev libpq --no-cache --virtual .build-deps \
+&& pip install --no-cache-dir --upgrade pip \
+&& apk add build-base \
+&& pip install -U setuptools pip \
+&& pip install --no-cache-dir -r requirements.txt \
+&& apk del .build-deps \
+&& apk add postgresql-libs libpq --no-cache
+
+COPY /users_service/tests/functional/src/ /tests/
+COPY utils/ /utils
+COPY /users_service/tests/functional/conftest.py /tests/
+COPY /users_service/tests/functional/settings.py /tests/
+COPY .env.test /
+
+ENTRYPOINT ["sh", "-c", "python3 utils/wait_for_pg.py; pytest -s tests"]
